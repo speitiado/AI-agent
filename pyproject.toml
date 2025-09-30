@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "demo-agente"
+version = "0.1.0"
+description = "Demo de un agente AI multi-acción con GPT y Docker"
+authors = ["Sebastian Peitiado"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+openai = "^1.51.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,12 @@
+{
+  "name": "AI-agent",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "agente",
+  "workspaceFolder": "/workspaces/AI-agent",
+  "runServices": ["agente"],
+  "shutdownAction": "stopCompose",
+  "envFile": "../.env",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {}
+  }
+}

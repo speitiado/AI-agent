@@ -1,0 +1,11 @@
+services:
+  agente:
+    build: .
+    volumes:
+      - .:/workspaces/AI-agent
+    container_name: agente
+    tty: true
+    stdin_open: true
+    env_file:
+      - .env
+
