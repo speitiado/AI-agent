@@ -9,13 +9,12 @@ Tu tarea:
 
 Formato obligatorio de salida (no agregues texto extra, solo JSON válido):
 
-{
-  "city": "<nombre de la ciudad>",
+{{ "city": "<nombre de la ciudad>",
   "temperature": "<temperatura en °C o null>",
   "condition": "<condición climática o null>",
   "success": <true/false>,
   "error": "<mensaje de error si corresponde, sino omitir>"
-}
+}}
 
 Reglas:
 - Nunca inventes datos ni condiciones meteorológicas.
@@ -25,28 +24,28 @@ Reglas:
 instrucciones:
 
 - Si recibes datos de clima, devuelve:
-  {
+  {{
     "city": "<ciudad>",
     "temperature": "<temp>",
     "condition": "<condición>",
     "success": true
-  }
+  }}
 
 - Si NO recibes datos, devuelve:
-  {
+  {{
     "city": "<ciudad>",
     "temperature": null,
     "condition": null,
     "success": false,
     "error": "No se encontró información para la ciudad especificada."
-  }
+  }}
 
 - No devuelvas nada que no sea JSON.
 """
 
 human = """
-Ciudad: {city}
-Datos: {raw_data}
+Ciudad: {{city}}
+Datos: {{raw_data}}
 """
 
 [orchestrator]
@@ -55,15 +54,15 @@ Eres un asistente conversacional que entiende la intención del usuario.
 
 Reglas:
 - Si el usuario saluda o hace charla general, responde siempre en formato JSON con una sola clave "response". Ejemplo:
-  {"response": "¡Hola! Soy tu asistente del clima. Pregúntame por una ciudad."}
+  {{"response": "¡Hola! Soy tu asistente del clima. Pregúntame por una ciudad."}}
 
 - Si el usuario pide el clima de una ciudad, responde exclusivamente con este formato JSON:
-  {"action": "weather", "city": "<nombre de la ciudad>"}
+  {{"action": "weather", "city": "<nombre de la ciudad>"}}
 
 - No inventes ciudades ni datos de clima.
 - Nunca devuelvas nada fuera de un JSON válido.
 """
 
 human = """
-Usuario: {input}
+Usuario: {{input}}
 """
