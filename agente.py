@@ -16,7 +16,7 @@ llm = init_chat_model("openai:gpt-4.1",temperature=0)
 class messageClassifier(BaseModel):
     messsage_type : Literal["libre","climatica"] = Field(
         ...,
-        description = "clasifica si el mensaje del usuario requiere una respuesta (libre) o una respuesta (climate)"
+        description = "clasifica si el mensaje del usuario requiere una respuesta comun (libre) o una respuesta  especifica (climatica)"
     )
 
 @tool("get_current_weather", description="Obtiene el clima actual de una ciudad del mundo.")
@@ -70,12 +70,50 @@ class State(TypedDict):
     message_type: str | None
 
 def clasify_message(state: State):
-    pass
+    last_message = state["messages"][-1]
+    classifier_llm = llm.with_structured_output(messageClassifier)
+
+    result = classifier_llm.invoke([
+        {
+            "role" : "system",
+            "content" : """
+                Clasifica el mensaje del usuario ya sea:
+                -'libre': si pregunta por operaciones matematicas, quiere saber tu opinion sobre algun topico de conversacion o necesita realizar alguna tarea.
+                -'climatica': si pregunta para saber el estado climatico de alguna ciudad o la temperatura
+            """
+        },
+        {"role":"user","content":last_message.content}
+    ])
+    return {"message_type": result.message_type}
 
 def chatbot(state: State):
     return {"messages": [llm.invoke(state["messages"])]}
 
 def router (state: State):
+    message_type = state.get("message_type", "libre")
+    if message_type == "climatica": 
+        return {"next": "especifica"}
+    
+    return {"next":"libre"}
+
+def agente_libre(state: State):
+    last_message = state["messages"][-1]
+
+    messages = [
+        {
+            "role" : "system",
+            "content" : """
+               Eres un asistente conversacional que entiende la intención del usuario. 
+               Cualquier pregunta del usuario que realice trataras de reponderle con la mejor informacion posible.
+               Si realiza preguntas logicas o matematicas, respondele siendo lo mas claro posible.
+            """
+        },
+        {"role":"user","content":last_message.content}
+    ]
+    reply = llm.invoke(messages)
+    return {"messages": [{"role": "asisstant", "content": reply.content}]}
+
+def agente_clima():
     pass
 
 graph_builder = StateGraph(State)
