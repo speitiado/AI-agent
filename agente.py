@@ -1,20 +1,19 @@
-from json import tool
 import os
+import re
 from typing import Annotated, Literal
 from dotenv import load_dotenv
-from openai import BaseModel
-from pydantic import Field
+from pydantic import Field, BaseModel
 import requests
 from typing_extensions import TypedDict
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START, END
-from langgraph import tool
+from langchain.tools import tool
 from langgraph.graph.message import add_messages
 load_dotenv()
-llm = init_chat_model("openai:gpt-4.1",temperature=0)
+llm = init_chat_model("openai:gpt-4o")
 
 class messageClassifier(BaseModel):
-    messsage_type : Literal["libre","climatica"] = Field(
+    message_type : Literal["libre","climatica"] = Field(
         ...,
         description = "clasifica si el mensaje del usuario requiere una respuesta comun (libre) o una respuesta  especifica (climatica)"
     )
@@ -32,6 +31,9 @@ def get_current_weather(city: str, units: str = "metric", lang: str = "es") -> d
     Returns:
         dict: Información del clima actual con temperatura, humedad, etc.
     """
+    city = city.strip().lower()
+    city = re.sub(r"(el clima en|cómo está|cómo estará|qué temperatura hay en|dime el clima de|hoy en|mañana en)", "", city, flags=re.IGNORECASE)
+    city = city.strip().title()
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
         return {"error": "Falta la API key de OpenWeatherMap."}
@@ -71,7 +73,12 @@ class State(TypedDict):
 
 def clasify_message(state: State):
     last_message = state["messages"][-1]
-    classifier_llm = llm.with_structured_output(messageClassifier)
+    # Acceso seguro al contenido del mensaje
+    if isinstance(last_message, dict):
+        user_content = last_message.get("content", "")
+    else:
+        user_content = getattr(last_message, "content", str(last_message))
+    classifier_llm = llm.with_structured_output(messageClassifier, method="function_calling")
 
     result = classifier_llm.invoke([
         {
@@ -82,19 +89,16 @@ def clasify_message(state: State):
                 -'climatica': si pregunta para saber el estado climatico de alguna ciudad o la temperatura
             """
         },
-        {"role":"user","content":last_message.content}
+        {"role":"user","content":user_content}
     ])
+
+
     return {"message_type": result.message_type}
 
-def chatbot(state: State):
-    return {"messages": [llm.invoke(state["messages"])]}
 
-def router (state: State):
-    message_type = state.get("message_type", "libre")
-    if message_type == "climatica": 
-        return {"next": "especifica"}
-    
-    return {"next":"libre"}
+def router(state: State):
+    print(f"DEBUG routing to: {state.get('message_type')}")
+    return state
 
 def agente_libre(state: State):
     last_message = state["messages"][-1]
@@ -108,43 +112,73 @@ def agente_libre(state: State):
                Si realiza preguntas logicas o matematicas, respondele siendo lo mas claro posible.
             """
         },
-        {"role":"user","content":last_message.content}
+        {"role":"user","content":last_message["content"]}
     ]
     reply = llm.invoke(messages)
-    return {"messages": [{"role": "asisstant", "content": reply.content}]}
+    return {"messages": [{"role": "assistant", "content": reply.content}]}
 
-def agente_clima():
-    pass
+def agente_clima(state: State):
+    last_message = state["messages"][-1]
+    llm_with_tools = llm.bind_tools([get_current_weather])
+    
+    messages = [
+        {
+            "role" : "system",
+            "content" : """
+                Sos un asistente especializado del clima.
+                Brinda el estado climatico de la ciudad que el usuario pida.
+                Debes brindar temperatura, el estado del clima y como se encontraran los cielos.
+                Responde siempre con lenguaje natural y con informacion verificada de la tool del clima, tambien responde siempre de manera amigable y clara
+            """
+        },
+        {"role":"user","content":last_message["content"]}
+    ]
+    reply = llm_with_tools.invoke(messages)
+    print("DEBUG reply:", reply)
+    return {"messages":[{"role":"assistant", "content": reply.content}]}
 
 graph_builder = StateGraph(State)
 
-def chatbot(state: State):
-    return {"messages": [llm.invoke(state["messages"])]}
-
 graph_builder.add_node("classifier", clasify_message)
 graph_builder.add_node("router", router)
-#graph_builder.add_node("chatbot", chatbot)
-#graph_builder.add_edge(START, "chatbot")
-graph_builder.add_edge("chatbot", END)
+graph_builder.add_node("libre", agente_libre)
+graph_builder.add_node("especifica", agente_clima)
+
+graph_builder.add_edge(START, "classifier")
+graph_builder.add_conditional_edges(
+    "router",
+    lambda state: state.get("message_type"),
+    path_map={"climatica": "especifica", "libre": "libre"}
+)
+graph_builder.add_edge("libre", END)
+graph_builder.add_edge("especifica", END)
 graph = graph_builder.compile()
 
-def stream_graph_updates(user_input: str):
-    for event in graph.stream({"messages": [{"role": "user", "content": user_input}]}):
-        for value in event.values():
-            print("Assistant:", value["messages"][-1].content)
 
 
-while True:
-    try:
-        user_input = input("User: ")
-        if user_input.lower() in ["quit", "exit", "q"]:
-            print("Goodbye!")
+def run_chatbot():
+    state = {"messages": [], "message_type": None}
+
+    while True:
+        user_input = input("Message: ")
+        if user_input == "exit":
+            print("Bye")
             break
-        stream_graph_updates(user_input)
-    except:
-        # fallback if input() is not available
-        user_input = "What do you know about LangGraph?"
-        print("User: " + user_input)
-        stream_graph_updates(user_input)
-        break
 
+        state["messages"] = state.get("messages", []) + [
+            {"role": "user", "content": user_input}
+        ]
+
+        state = graph.invoke(state)
+
+        if state.get("messages") and len(state["messages"]) > 0:
+            last_message = state["messages"][-1]
+            # Acceso correcto al contenido
+            if isinstance(last_message, dict):
+                print(f"Assistant: {last_message['content']}")
+            else:
+                print(f"Assistant: {getattr(last_message, 'content', str(last_message))}")
+
+
+if __name__ == "__main__":
+    run_chatbot()
