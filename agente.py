@@ -1,15 +1,28 @@
+import operator
+from dotenv import load_dotenv
+from langchain.tools import tool
+from langchain.chat_models import init_chat_model
+from langchain.messages import AnyMessage
+from typing_extensions import TypedDict, Annotated
 import os
-from openai import OpenAI
+load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+model = init_chat_model(
+    "openai:gpt-5-mini",
+    temperature=0
+)
 
-def consultar_gpt(mensaje, historial):
-    messages = historial + [{"role": "user", "content": mensaje}]
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",  # rápido y económico
-        messages=messages
-    )
-    return response.choices[0].message.content
+class MessagesState(TypedDict):
+    messages: Annotated[list[AnyMessage], operator.add]
+    llm_calls: int
+
+# def consultar_gpt(mensaje, historial):
+#     messages = historial + [{"role": "user", "content": mensaje}]
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",  # rápido y económico
+#         messages=messages
+#     )
+#     return response.choices[0].message.content
 
 # Acciones simuladas
 def crear_reunion(mensaje):
